@@ -9,6 +9,7 @@ setup(
     packages=find_packages(),
     py_modules=["scrape_instagram"],
     install_requires=[
+        "setuptools<=80.9.0",
         "selenium==4.33.0",
         "selenium-wire==5.1.0",
         "webdriver-manager==4.0.2",
