@@ -13,6 +13,11 @@ RUN apt-get update && \
 RUN set -eux; \
     release_json=$(curl -s https://api.github.com/repos/mozilla/geckodriver/releases/latest); \
     url=$(echo "$release_json" | jq -r '.assets[] | select(.name | test("linux64.tar.gz$")) | .browser_download_url'); \
+    if [ -z "$url" ] || [ "$url" = "null" ]; then \
+        echo "Could not find geckodriver linux64 asset in GitHub API response:"; \
+        echo "$release_json"; \
+        exit 1; \
+    fi; \
     wget -O /tmp/geckodriver.tar.gz "$url"; \
     tar -xzf /tmp/geckodriver.tar.gz -C /usr/local/bin; \
     rm /tmp/geckodriver.tar.gz
