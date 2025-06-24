@@ -13,7 +13,7 @@ import time
 import argparse
 import urllib.parse
 from datetime import datetime
-from seleniumwire import webdriver
+from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
