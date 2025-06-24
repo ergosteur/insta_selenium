@@ -80,7 +80,7 @@ if not os.path.exists(PROFILE_DIR):
         print("    Run this script with the --login flag to do so.")
         sys.exit(1)
 
-# Paths for persistence files
+# Paths for persistence files if not in login mode
 if not args.login:
     RESUME_FILE = args.resume_file or os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "last-post-url.txt")
     RESUME_LOG = args.resume_log or os.path.join(DOWNLOAD_ROOT, SESSION_NAME, f"{SESSION_NAME}-posts_{timestamp_now}.log")
@@ -88,9 +88,8 @@ if not args.login:
     PROCESSED_URLS_FILE = os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "processed-urls.json")
     if args.processed_urls_file:
         PROCESSED_URLS_FILE = os.path.abspath(args.processed_urls_file)
-
-session_dir = os.path.join(DOWNLOAD_ROOT, SESSION_NAME)
-os.makedirs(session_dir, exist_ok=True)
+    session_dir = os.path.join(DOWNLOAD_ROOT, SESSION_NAME)
+    os.makedirs(session_dir, exist_ok=True)
 
 # === Selenium Setup ===
 options = Options()
