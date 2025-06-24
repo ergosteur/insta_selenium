@@ -9,11 +9,11 @@ setup(
     packages=find_packages(),
     py_modules=["scrape_instagram"],
     install_requires=[
-        "selenium==4.33.0",
-        "webdriver-manager==4.0.2",
+        "selenium>=4.0.0",
+        "webdriver-manager>=3.8.0",
         "yt-dlp",
         "tqdm",
-        "requests==2.32.4",
+        "requests>=2.25.0",
     ],
     entry_points={
         "console_scripts": [
