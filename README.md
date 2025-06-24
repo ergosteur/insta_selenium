@@ -19,31 +19,57 @@ A Python tool for scraping and downloading Instagram post and reel media using S
 
 ## Installation
 
-### From Source
+### via pipx (recommended, easiest)
+
+`pipx` automatically isolates the tool in its own environment (no need for a venv):
+1. Install using pipx directly from this git repo:
+   ```bash
+   pipx install git+https://github.com/ergosteur/insta_selenium.git
+   ```
+2. Download [geckodriver](https://github.com/mozilla/geckodriver/releases) and ensure it's in your PATH.  
+   *On Windows 11, geckodriver is available via WinGet:*  
+   `winget install --id Mozilla.GeckoDriver`
+
+### via pip
+
+1. Create and activate a virtual environment (recommended):
+   ```bash
+   python -m venv .venv
+   # On Windows:
+   .venv\Scripts\activate
+   # On macOS/Linux:
+   source .venv/bin/activate
+   ```
+2. Install using pip directly from this git repo:
+   ```
+   pip install git+https://github.com/ergosteur/insta_selenium.git
+   ```
+3. Download [geckodriver](https://github.com/mozilla/geckodriver/releases) and ensure it's in your PATH.  
+   *On Windows 11, geckodriver is available via WinGet:*  
+   `winget install --id Mozilla.GeckoDriver`
+
+### from source
 
 1. Clone this repository:
    ```bash
    git clone https://github.com/ergosteur/insta_selenium.git
    cd insta_selenium
    ```
-2. Install dependencies:
+2. Create and activate a virtual environment (recommended):
+   ```bash
+   python -m venv .venv
+   # On Windows:
+   .venv\Scripts\activate
+   # On macOS/Linux:
+   source .venv/bin/activate
+   ```
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-3. Download [geckodriver](https://github.com/mozilla/geckodriver/releases) and ensure it's in your PATH.  
-   *On Windows 11, geckodriver is available via WinGet.*  
+4. Download [geckodriver](https://github.com/mozilla/geckodriver/releases) and ensure it's in your PATH.  
+   *On Windows 11, geckodriver is available via WinGet:*  
    `winget install --id Mozilla.GeckoDriver`
-
-### Via pip/pipx
-
-You can also install directly from the repository:
-```bash
-pip install git+https://github.com/ergosteur/insta_selenium.git
-```  
-Using pipx (preferred):
-```bash
-pipx install git+https://github.com/ergosteur/insta_selenium.git
-```
 
 ## Usage
 
@@ -66,7 +92,15 @@ python scrape_instagram.py --username <instagram_username> [options]
 - `--max-grabbed-posts <N>`: Limit the number of posts to download after scraping.
 - `--headless`: Run the browser in headless mode (no GUI).
 - `--resume-log <file>`: Specify a log file for storing scanned post URLs.
+- `--resume-file <file>`: File to track last successfully downloaded post URL.
 - `--no-resume`: Ignore resume file and start fresh.
+- `--processed-urls-file <file>`: File to track all unique URLs already processed.
+- `--download-path <dir>`: Directory to save downloaded media (default: ./downloads).
+- `--firefox-profile-dir <dir>`: Path to Firefox profile directory (default: ./firefox_profile).
+- `--overwrite`: Overwrite existing downloaded files.
+- `--login`: Open browser for Instagram login and save session to Firefox profile.
+- `--no-retry-errors`: Do not retry failed posts from error logs.
+- `--retry-errors-only`: Only retry failed posts from error logs and exit.
 
 For a full list of options, run:
 
@@ -78,6 +112,7 @@ insta_selenium --help
 
 - Use responsibly and in accordance with Instagram's terms of service.
 - Excessive automation may result in account restrictions or bans.
+- Use with a secondary account is recommended.
 
 ## AI-Assisted Development
 
