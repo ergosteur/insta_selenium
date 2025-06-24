@@ -6,7 +6,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends xvfb fluxbox x11vnc && \
+    apt-get install -y --no-install-recommends xvfb fluxbox x11vnc openssl && \
     rm -rf /var/lib/apt/lists/*
 
 # Install geckodriver
@@ -20,6 +20,11 @@ RUN wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | t
     ln -s /opt/noVNC-1.4.0 /opt/novnc && \
     wget -qO- https://github.com/novnc/websockify/archive/refs/tags/v0.11.0.tar.gz | tar xz -C /opt && \
     ln -s /opt/websockify-0.11.0 /opt/novnc/utils/websockify
+
+RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /opt/websockify-0.11.0/self.pem \
+  -out /opt/websockify-0.11.0/self.pem \
+  -subj "/CN=localhost"
 
 # Set workdir and copy code
 WORKDIR /app
@@ -42,4 +47,5 @@ ENV MOZ_HEADLESS=1
 EXPOSE 5900 6080
 
 # Default command (can be overridden)
-CMD ["insta_selenium", "--firefox-profile-dir", "/data/firefox_profile", "--download-path", "/data/downloads", "--headless"]
+CMD ["insta_selenium_login", "--firefox-profile-dir", "/data/firefox_profile", "--download-path", "/data/downloads"]
+ENTRYPOINT ["insta_selenium", "--firefox-profile-dir", "/data/firefox_profile", "--download-path", "/data/downloads", "--headless"]
