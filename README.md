@@ -69,10 +69,9 @@ pipx install git+https://github.com/ergosteur/insta_selenium.git
    ```bash
    pip install -r requirements.txt
    ```
-
 ## Usage
 
-After installation, you can run the tool from the command line:
+After installation (or building the Docker image), you can run the tool from the command line:
 
 ```bash
 insta_selenium --username <instagram_username> [options]
@@ -106,6 +105,53 @@ For a full list of options, run:
 ```bash
 insta_selenium --help
 ```
+## Docker
+
+You can run `insta_selenium` in a containerized environment with full support for both **headless scraping** and **interactive login via a web browser (VNC/noVNC)**.
+
+### Build the Docker image
+
+```bash
+docker build -t insta_selenium .
+```
+
+### Data Persistence
+
+Create a local `data` directory to `/data` that will be mounted as a volume in the container to persist your Firefox profile and downloads:
+
+```bash
+mkdir -p data/firefox_profile data/downloads
+```
+
+### 1. Headless Scraping (default)
+
+This is the default entrypoint and is suitable for all normal scraping and downloading:
+
+```bash
+docker run -it -v "$PWD/data:/data" insta_selenium --username <instagram_username>
+```
+
+- Downloads and Firefox profile will be stored in your local `./data` directory.
+- You can add any other command-line options as needed.
+
+### 2. Interactive Login via Web UI (VNC/noVNC)
+
+To perform an interactive login (for the first time or when cookies expire), use the special login entrypoint.  
+This will start a virtual desktop and expose a web-based VNC client on port 6080.
+
+```bash
+docker run -it -p 6080:6080 -v "$PWD/data:/data" insta_selenium_login
+```
+
+- Then open [http://localhost:6080/vnc.html](http://localhost:6080/vnc.html) in your browser.
+- Log in to Instagram in the Firefox window.
+- After login, close the browser window and stop the container.
+- Your session/cookies will be saved in `./data/firefox_profile` for future headless runs.
+
+**Note:**  
+- For convenience, the demo VNC setup does not use a password. For production, consider securing your VNC/noVNC setup.
+- After logging in once, you can use the headless mode for all further scraping.
+
 
 ## Notes
 
