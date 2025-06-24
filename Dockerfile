@@ -49,5 +49,5 @@ ENV MOZ_HEADLESS=1
 EXPOSE 5900 6080
 
 # Default command (can be overridden)
-CMD ["insta_selenium_login", "--firefox-profile-dir", "/data/firefox_profile", "--download-path", "/data/downloads"]
-ENTRYPOINT ["insta_selenium", "--firefox-profile-dir", "/data/firefox_profile", "--download-path", "/data/downloads", "--headless"]
+#CMD ["insta_selenium_login", "--firefox-profile-dir", "/data/firefox_profile", "--download-path", "/data/downloads"]
+CMD ["insta_selenium", "--firefox-profile-dir", "/data/firefox_profile", "--download-path", "/data/downloads", "--headless"]
