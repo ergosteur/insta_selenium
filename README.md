@@ -140,7 +140,7 @@ To perform an interactive login (for the first time or when cookies expire), use
 This will start a virtual desktop and expose a web-based VNC client on port 6080.
 
 ```bash
-docker run -it -p 6080:6080 -v "$PWD/data:/data" insta_selenium_login
+docker run -it -p 6080:6080 -v "$PWD/data:/data" insta_selenium insta_selenium_login
 ```
 
 - Then open [http://localhost:6080/vnc.html](http://localhost:6080/vnc.html) in your browser.
