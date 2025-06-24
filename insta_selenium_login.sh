@@ -6,7 +6,7 @@
 # with the Dockerfile provided.
 
 export DISPLAY=:1
-export MOZ_HEADLESS=0  # Ensure Firefox runs in non-headless mode for login
+unset MOZ_HEADLESS  # Ensure Firefox runs in non-headless mode for login
 
 # Start Xvfb (virtual X server)
 Xvfb :1 -screen 0 1920x1080x24 &

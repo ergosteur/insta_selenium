@@ -46,9 +46,6 @@ RUN mkdir -p /data/firefox_profile /data/downloads
 COPY insta_selenium_login.sh /usr/local/bin/insta_selenium_login
 RUN chmod +x /usr/local/bin/insta_selenium_login
 
-# Set environment variable for headless operation by default
-ENV MOZ_HEADLESS=1
-
 # Expose VNC and noVNC ports for login mode
 EXPOSE 5900 6080
 
