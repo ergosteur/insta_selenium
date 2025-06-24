@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="insta_selenium",
-    version="0.1.0",
+    version="0.1.1",
     description="A command-line tool for scraping Instagram post and reel media using Selenium.",
     author="ergosteur",
     author_email="ergosteur@gmail.com",
