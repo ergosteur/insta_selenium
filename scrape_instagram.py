@@ -71,6 +71,8 @@ timestamp_now = datetime.now().strftime("%Y%m%d_%H%M%S")
 # Warn if PROFILE_DIR does not exist and not in login mode
 if not os.path.exists(PROFILE_DIR):
     if args.login:
+        print(f"[!] Firefox profile directory '{PROFILE_DIR}' does not exist.")
+        print(f"[!] --login specified, creating new profile.")
         os.makedirs(PROFILE_DIR, exist_ok=True)
     else:
         print(f"[!] Firefox profile directory '{PROFILE_DIR}' does not exist.")
@@ -96,8 +98,15 @@ if args.headless:
     options.add_argument("--headless")
 options.add_argument("--width=1920")
 options.add_argument("--height=1080")
-profile = FirefoxProfile(PROFILE_DIR)
-options.profile = profile
+if args.login:
+    # Use -profile argument to ensure persistence for manual login
+    options.add_argument("-profile")
+    options.add_argument(PROFILE_DIR)
+    # Do NOT use FirefoxProfile here
+else:
+    # Use FirefoxProfile for normal runs (optional, or just omit for default)
+    profile = FirefoxProfile(PROFILE_DIR)
+    options.profile = profile
 service = Service()
 driver = webdriver.Firefox(service=service, options=options)
 driver.implicitly_wait(10)
@@ -105,7 +114,7 @@ driver.implicitly_wait(10)
 # Handle --login mode
 if args.login:
     print("[*] Opening Instagram login page in Firefox...")
-    driver.get("https://www.instagram.com/accounts/login/")
+    driver.get("https://www.instagram.com/")
     print("[*] Please log in to Instagram in the opened browser window.")
     print("[*] Do NOT close the browser after logging in.")
     input("[*] After you have logged in and see your feed, press Enter here to finish and save the session...")
