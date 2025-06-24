@@ -68,18 +68,6 @@ if args.login and args.headless:
     print("    --login requires a visible browser window for manual login.")
     sys.exit(1)
 
-# Handle --login mode
-if args.login:
-    SESSION_NAME = "login_session"
-    print("[*] Opening Instagram login page in Firefox...")
-    driver.get("https://www.instagram.com/")
-    print("[*] Please log in to Instagram in the opened browser window.")
-    print("[*] Do NOT close the browser after logging in.")
-    input("[*] After you have logged in and see your feed, press Enter here to finish and save the session...")
-    print("[*] Login session should now be saved in your Firefox profile directory.")
-    driver.quit()
-    sys.exit(0)
-
 # Warn if PROFILE_DIR does not exist and not in login mode
 if not os.path.exists(PROFILE_DIR):
     if args.login:
@@ -121,6 +109,17 @@ else:
 service = Service()
 driver = webdriver.Firefox(service=service, options=options)
 driver.implicitly_wait(10)
+# Handle --login mode using Firefox profile and selenium
+if args.login:
+    SESSION_NAME = "login_session"
+    print("[*] Opening Instagram login page in Firefox...")
+    driver.get("https://www.instagram.com/")
+    print("[*] Please log in to Instagram in the opened browser window.")
+    print("[*] Do NOT close the browser after logging in.")
+    input("[*] After you have logged in and see your feed, press Enter here to finish and save the session...")
+    print("[*] Login session should now be saved in your Firefox profile directory.")
+    driver.quit()
+    sys.exit(0)
 
 def sanitize_filename(url):
     name = urllib.parse.unquote(url.split("?")[0].split("/")[-1])
