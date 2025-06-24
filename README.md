@@ -109,38 +109,27 @@ insta_selenium --help
 
 You can run `insta_selenium` in a containerized environment with full support for both **headless scraping** and **interactive login via a web browser (VNC/noVNC)**.
 
-### Build the Docker image
+1. Pull the Docker image
 
 ```bash
-docker build -t insta_selenium .
+docker pull ergosteur/insta_selenium:latest
 ```
 
-### Data Persistence
+2. Data Persistence
 
 Create a local `data` directory to `/data` that will be mounted as a volume in the container to persist your Firefox profile and downloads:
 
 ```bash
-mkdir -p data/firefox_profile data/downloads
+mkdir -p $PWD/data/firefox_profile $PWD/data/downloads
 ```
 
-### 1. Headless Scraping (default)
-
-This is the default entrypoint and is suitable for all normal scraping and downloading:
-
-```bash
-docker run -it -v "$PWD/data:/data" insta_selenium --username <instagram_username>
-```
-
-- Downloads and Firefox profile will be stored in your local `./data` directory.
-- You can add any other command-line options as needed.
-
-### 2. Interactive Login via Web UI (VNC/noVNC)
+3. Interactive Login via Web UI (VNC/noVNC)
 
 To perform an interactive login (for the first time or when cookies expire), use the special login entrypoint.  
 This will start a virtual desktop and expose a web-based VNC client on port 6080.
 
 ```bash
-docker run -it -p 6080:6080 -v "$PWD/data:/data" insta_selenium insta_selenium_login
+docker run --rm -it -p 6080:6080 -v "$PWD/data:/data" ergosteur/insta_selenium insta_selenium_login
 ```
 
 - Then open [http://localhost:6080/vnc.html](http://localhost:6080/vnc.html) in your browser.
@@ -151,6 +140,17 @@ docker run -it -p 6080:6080 -v "$PWD/data:/data" insta_selenium insta_selenium_l
 **Note:**  
 - For convenience, the demo VNC setup does not use a password. For production, consider securing your VNC/noVNC setup.
 - After logging in once, you can use the headless mode for all further scraping.
+
+4. Headless Scraping
+
+Once logged in, you can run the script with:
+
+```bash
+docker run --rm -it -v "$PWD/data:/data" ergosteur/insta_selenium insta_selenium --headless --firefox-profile-dir /data/firefox_profile --download-path /data/downloads --username <username>
+```
+
+- Downloads and Firefox profile will be stored in your local `./data` directory.
+- Replace <username> with target username
 
 
 ## Notes
