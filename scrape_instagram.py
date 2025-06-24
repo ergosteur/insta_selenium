@@ -370,80 +370,84 @@ def download_media(media_items, target_dir):
 
 
 # === Main Execution ===
-try:
-    if POST_URL:
-        # If a specific post ID is provided, just scrape that one
-        items, dir_path = extract_media_urls(POST_URL)
-        download_media(items, dir_path)
-        # When processing a single post, add it to processed URLs if successful
-        processed_urls = load_processed_urls(PROCESSED_URLS_FILE)
-        processed_urls.add(POST_URL)
-        save_processed_urls(PROCESSED_URLS_FILE, processed_urls)
+def main():
+    try:
+        if POST_URL:
+            # If a specific post ID is provided, just scrape that one
+            items, dir_path = extract_media_urls(POST_URL)
+            download_media(items, dir_path)
+            # When processing a single post, add it to processed URLs if successful
+            processed_urls = load_processed_urls(PROCESSED_URLS_FILE)
+            processed_urls.add(POST_URL)
+            save_processed_urls(PROCESSED_URLS_FILE, processed_urls)
 
-    else:
-        # Init total_urls_grabbed counter
-        total_urls_grabbed = 0
-        # Scrape all post links from the profile (most recent to oldest)
-        post_links = collect_post_links()
-        
-        # Load previously processed URLs for robust deduplication
-        processed_urls = load_processed_urls(PROCESSED_URLS_FILE)
-
-        # Reverse the list so it goes from oldest to most recent
-        # This modification is applied before calculating the resume index
-        # to ensure the index is correct for the desired processing order.
-        post_links.reverse() # In-place reverse of the list
-
-        resume_index = 0
-        last_url_from_file = None
-
-        # Try to find the last processed URL from the resume file
-        if os.path.exists(RESUME_FILE) and not args.no_resume:
-            with open(RESUME_FILE) as f:
-                last_url_from_file = f.read().strip()
-                if last_url_from_file:
-                    try:
-                        # Find the index of the last processed URL in our *now reversed* list
-                        # This index will correctly point to the item just before where we want to resume
-                        resume_index = post_links.index(last_url_from_file) + 1
-                        tqdm.write(f"[⏩] Resuming from after: {last_url_from_file} (index {resume_index} in reversed list)")
-                    except ValueError:
-                        tqdm.write(f"[!] Warning: Last processed URL '{last_url_from_file}' not found in current list of posts. Starting from the oldest available.")
-                        resume_index = 0
-                else:
-                    tqdm.write("[*] No last URL found in resume file. Starting from the oldest available.")
         else:
-            tqdm.write("[*] Resume file not found. Starting from the oldest available.")
-
-
-        # Iterate through the collected links starting from the resume point
-        # The list is already reversed, so this will process from oldest to newest
-        for link_to_process in tqdm(post_links[resume_index:], desc="Processing Posts (Oldest to Newest)"):
-            if link_to_process in processed_urls:
-                tqdm.write(f"[⏩] Skipping already processed: {link_to_process}")
-                continue # Skip this URL if it's already in our processed set
-            total_urls_grabbed += 1
+            # Init total_urls_grabbed counter
+            total_urls_grabbed = 0
+            # Scrape all post links from the profile (most recent to oldest)
+            post_links = collect_post_links()
             
-            # Stop at --max-grabbed-posts if specified
-            if MAX_GRABBED_POSTS:
-                if total_urls_grabbed > MAX_GRABBED_POSTS :
-                    tqdm.write(f"[!] Reached maximum number of grabbed posts ({MAX_GRABBED_POSTS}), exiting.")
-                    break
+            # Load previously processed URLs for robust deduplication
+            processed_urls = load_processed_urls(PROCESSED_URLS_FILE)
 
-            try:
-                items, dir_path = extract_media_urls(link_to_process)
-                download_media(items, dir_path)
-                # Mark this URL as successfully processed and save the updated set
-                processed_urls.add(link_to_process)
-                save_processed_urls(PROCESSED_URLS_FILE, processed_urls)
-            except Exception as e:
-                tqdm.write(f"[!!!] Error processing {link_to_process}: {e}")
-                with open(ERROR_LOG, "a") as elog:
-                    elog.write(f"{link_to_process} — main loop error: {e}\n")
+            # Reverse the list so it goes from oldest to most recent
+            # This modification is applied before calculating the resume index
+            # to ensure the index is correct for the desired processing order.
+            post_links.reverse() # In-place reverse of the list
 
-except KeyboardInterrupt:
-    print("[!] Interrupted by user - please wait for clean exit...")
-finally:
-    driver.quit()
-    print("[✓] Browser closed.")
+            resume_index = 0
+            last_url_from_file = None
+
+            # Try to find the last processed URL from the resume file
+            if os.path.exists(RESUME_FILE) and not args.no_resume:
+                with open(RESUME_FILE) as f:
+                    last_url_from_file = f.read().strip()
+                    if last_url_from_file:
+                        try:
+                            # Find the index of the last processed URL in our *now reversed* list
+                            # This index will correctly point to the item just before where we want to resume
+                            resume_index = post_links.index(last_url_from_file) + 1
+                            tqdm.write(f"[⏩] Resuming from after: {last_url_from_file} (index {resume_index} in reversed list)")
+                        except ValueError:
+                            tqdm.write(f"[!] Warning: Last processed URL '{last_url_from_file}' not found in current list of posts. Starting from the oldest available.")
+                            resume_index = 0
+                    else:
+                        tqdm.write("[*] No last URL found in resume file. Starting from the oldest available.")
+            else:
+                tqdm.write("[*] Resume file not found. Starting from the oldest available.")
+
+
+            # Iterate through the collected links starting from the resume point
+            # The list is already reversed, so this will process from oldest to newest
+            for link_to_process in tqdm(post_links[resume_index:], desc="Processing Posts (Oldest to Newest)"):
+                if link_to_process in processed_urls:
+                    tqdm.write(f"[⏩] Skipping already processed: {link_to_process}")
+                    continue # Skip this URL if it's already in our processed set
+                total_urls_grabbed += 1
+                
+                # Stop at --max-grabbed-posts if specified
+                if MAX_GRABBED_POSTS:
+                    if total_urls_grabbed > MAX_GRABBED_POSTS :
+                        tqdm.write(f"[!] Reached maximum number of grabbed posts ({MAX_GRABBED_POSTS}), exiting.")
+                        break
+
+                try:
+                    items, dir_path = extract_media_urls(link_to_process)
+                    download_media(items, dir_path)
+                    # Mark this URL as successfully processed and save the updated set
+                    processed_urls.add(link_to_process)
+                    save_processed_urls(PROCESSED_URLS_FILE, processed_urls)
+                except Exception as e:
+                    tqdm.write(f"[!!!] Error processing {link_to_process}: {e}")
+                    with open(ERROR_LOG, "a") as elog:
+                        elog.write(f"{link_to_process} — main loop error: {e}\n")
+
+    except KeyboardInterrupt:
+        print("[!] Interrupted by user - please wait for clean exit...")
+    finally:
+        driver.quit()
+        print("[✓] Browser closed.")
+
+if __name__ == "__main__":
+    main()
 
