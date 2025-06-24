@@ -12,17 +12,15 @@ A Python tool for scraping and downloading Instagram post and reel media using S
 
 ## Prerequisites
 
-- **Python 3.8+**  
-  [Download Python](https://www.python.org/downloads/)
-- **Mozilla Firefox browser**  
-  [Download Firefox](https://www.mozilla.org/firefox/)
+- [**Python 3.8+**](https://www.python.org/downloads/)
+- [**Mozilla Firefox browser**](https://www.mozilla.org/firefox/)
 - **GeckoDriver** (Firefox WebDriver)  
   [Download geckodriver](https://github.com/mozilla/geckodriver/releases) and ensure it's in your PATH.  
   *On Windows 11, geckodriver is available via WinGet:*  
   ```bash
   winget install --id Mozilla.GeckoDriver
   ```
-- **pip**, **pipx**, or **git**  
+- For installation, one of:
   - [pip](https://pip.pypa.io/en/stable/installation/)
   - [pipx](https://pypa.github.io/pipx/)
   - [git](https://git-scm.com/)
