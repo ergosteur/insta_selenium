@@ -22,7 +22,7 @@ import requests
 # === Command Line Arguments ===
 parser = argparse.ArgumentParser(description="Scrape Instagram post and reel media URLs")
 parser.add_argument("--post-id", help="Instagram post shortcode (e.g., C0EVTGHSQUF)")
-parser.add_argument("--username", default="heed_heejin", help="Target username (default: heed_heejin)")
+parser.add_argument("--username", required=True, help="Target username (required)")
 parser.add_argument("--max-scraped-posts", type=int, help="Max posts to scrape from profile")
 parser.add_argument("--max-grabbed-posts", type=int, help="Max posts to download (after scraping)")
 parser.add_argument("--resume-log", help="Log file for storing scanned post URLs (now stores scraped order)")
