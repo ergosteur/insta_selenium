@@ -81,12 +81,13 @@ if not os.path.exists(PROFILE_DIR):
         sys.exit(1)
 
 # Paths for persistence files
-RESUME_FILE = args.resume_file or os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "last-post-url.txt")
-RESUME_LOG = args.resume_log or os.path.join(DOWNLOAD_ROOT, SESSION_NAME, f"{SESSION_NAME}-posts_{timestamp_now}.log")
-ERROR_LOG = RESUME_LOG.replace("posts_", "errors_")
-PROCESSED_URLS_FILE = os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "processed-urls.json")
-if args.processed_urls_file:
-    PROCESSED_URLS_FILE = os.path.abspath(args.processed_urls_file)
+if not args.login:
+    RESUME_FILE = args.resume_file or os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "last-post-url.txt")
+    RESUME_LOG = args.resume_log or os.path.join(DOWNLOAD_ROOT, SESSION_NAME, f"{SESSION_NAME}-posts_{timestamp_now}.log")
+    ERROR_LOG = RESUME_LOG.replace("posts_", "errors_")
+    PROCESSED_URLS_FILE = os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "processed-urls.json")
+    if args.processed_urls_file:
+        PROCESSED_URLS_FILE = os.path.abspath(args.processed_urls_file)
 
 session_dir = os.path.join(DOWNLOAD_ROOT, SESSION_NAME)
 os.makedirs(session_dir, exist_ok=True)
@@ -111,7 +112,6 @@ driver = webdriver.Firefox(service=service, options=options)
 driver.implicitly_wait(10)
 # Handle --login mode using Firefox profile and selenium
 if args.login:
-    SESSION_NAME = "login_session"
     print("[*] Opening Instagram login page in Firefox...")
     driver.get("https://www.instagram.com/")
     print("[*] Please log in to Instagram in the opened browser window.")
