@@ -25,6 +25,7 @@ from selenium.common.exceptions import TimeoutException
 from tqdm import tqdm
 import json
 import requests
+import glob
 
 # === Command Line Arguments ===
 parser = argparse.ArgumentParser(description="Scrape Instagram post and reel media URLs")
@@ -41,6 +42,8 @@ parser.add_argument("--login", action="store_true", help="Open browser for Insta
 parser.add_argument("--download-path", help="Directory to save downloaded media (default: ./downloads)")
 parser.add_argument("--firefox-profile-dir", help="Path to Firefox profile directory (default: ./firefox_profile)")
 parser.add_argument("--overwrite", action="store_true", help="Overwrite existing downloaded files")
+parser.add_argument("--no-retry-errors", action="store_true", help="Do not retry failed posts from error logs")
+parser.add_argument("--retry-errors-only", action="store_true", help="Only retry failed posts from error logs and exit")
 args = parser.parse_args()
 
 # === Constants ===
@@ -250,23 +253,33 @@ def download_video(post_url, post_dir, shortcode, label="video"):
     from yt_dlp import YoutubeDL
     # Use yt-dlp's %(title)s or %(id)s as fallback, and prefix with label
     outtmpl = os.path.join(post_dir, f"{label}_%(id)s.%(ext)s")
-    # Check for existing files if not overwriting
     if not args.overwrite:
         existing = [f for f in os.listdir(post_dir) if f.startswith(label) and f.endswith(('.mp4', '.webm', '.mkv'))]
         if existing:
             tqdm.write(f"[⏩] Skipping video download for {post_url} (video file already exists)")
             return
     try:
+        user_agent = driver.execute_script("return navigator.userAgent;")
         tqdm.write(f"[▶] Downloading video(s) via yt-dlp from post: {shortcode}")
-        ydl_opts = {
+        ytdl_opts = {
             'outtmpl': outtmpl,
             'quiet': True,
             'verbose': False,
             'no_warnings': True,
-            'progress': False
+            'progress': False,
+            # Use cookies from the Firefox profile directory
+            'cookiesfrombrowser': ('firefox', PROFILE_DIR),
+            'user_agent': user_agent,
+            'noplaylist': False,  # <-- Ensure yt-dlp treats the post as a playlist
+            'ignoreerrors': True,  # <-- Ignore errors for individual videos
+            'format': 'bestvideo+bestaudio/best',  # Download best quality video
+            'postprocessors': [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': 'mp4',  # Convert to mp4 if not already
+            }],
         }
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([post_url])
+        with YoutubeDL(ytdl_opts) as ytdl:
+            ytdl.download([post_url])
     except Exception as e:
         tqdm.write(f"[!] yt-dlp error: {e}")
         with open(ERROR_LOG, "a") as elog:
@@ -274,6 +287,9 @@ def download_video(post_url, post_dir, shortcode, label="video"):
 
 def download_images(media_items, target_dir):
     for url, label in tqdm(media_items, desc=f"Downloading media to {os.path.basename(target_dir)}", leave=False):
+        if url.startswith("blob:"):
+            tqdm.write(f"[⏩] Skipping blob URL: {url}")
+            continue
         # Extract the original filename from the URL path
         parsed_url = urllib.parse.urlparse(url)
         original_filename = os.path.basename(parsed_url.path)
@@ -309,7 +325,7 @@ def extract_media_urls(post_url):
 
     tqdm.write(f"[i] Extracting media from post: {shortcode}")
     try:
-        # Wait for a large <img> or <video> tag to appear (more robust than <article>)
+        # Wait for a large <img> or <video> tag to appear
         tqdm.write(f"[i] Waiting for main media element (<img> or <video>)...")
         WebDriverWait(driver, 20).until(
             lambda d: any(
@@ -320,21 +336,19 @@ def extract_media_urls(post_url):
                 for vid in d.find_elements(By.TAG_NAME, "video")
             )
         )
-
-        # Try to find the time element, but fallback if not found
-        tqdm.write(f"[i] Looking for <time> tag...")
-        try:
-            time_elem = WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((By.TAG_NAME, "time"))
-            )
-            timestamp_raw = time_elem.get_attribute("datetime")
-            timestamp_prefix = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00")).strftime("%Y%m%d")
-        except Exception as e:
-            tqdm.write(f"[!] Warning: Could not find time element on {post_url} after wait. Using current time. Error: {e}")
-            timestamp_raw = datetime.now().isoformat()
-            timestamp_prefix = datetime.now().strftime("%Y%m%d")
     except Exception as e:
         tqdm.write(f"[!] Warning: Could not find main media element on {post_url}. Error: {e}")
+
+    # Try to find the time element, but fallback if not found
+    tqdm.write(f"[i] Looking for <time> tag...")
+    try:
+        time_elem = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.TAG_NAME, "time"))
+        )
+        timestamp_raw = time_elem.get_attribute("datetime")
+        timestamp_prefix = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00")).strftime("%Y%m%d")
+    except Exception as e:
+        tqdm.write(f"[!] Warning: Could not find time element on {post_url} after wait. Using current time. Error: {e}")
         timestamp_raw = datetime.now().isoformat()
         timestamp_prefix = datetime.now().strftime("%Y%m%d")
     tqdm.write(f"[i] Timestamp found: {timestamp_raw}")
@@ -367,97 +381,38 @@ def extract_media_urls(post_url):
     index = 1
     video_detected = False
 
-    def check_for_video():
-        nonlocal video_detected
-        tqdm.write(f"[i] Searching for <video> tags...")
-        videos = driver.find_elements(By.TAG_NAME, "video")
-        if videos:
-            tqdm.write(f"[▶] Detected {len(videos)} <video> tag(s) — using yt-dlp later")
-            video_detected = True
-        else:
-            tqdm.write(f"[i] No <video> tag(s) detected")
-
+    # Only collect images for manual download
     def collect_images():
-        nonlocal index
-        tqdm.write(f"[i] Searching for <img> tags...")
+        nonlocal index, video_detected
         img_tags = driver.find_elements(By.TAG_NAME, "img")
-
-        processed_imgtag_count = 0  # Counter for all <img> tags processed on the current slide
-        collected_count_on_slide = 0 # Counter for images that actually meet criteria and are collected
-
-        # Single pass to process, filter, and collect images
-        total = len(img_tags)
-        for i, img in tqdm(enumerate(img_tags), leave=False):
-            processed_imgtag_count += 1
-
+        for img in img_tags:
             url = img.get_attribute("src")
-            
-            # Skip if URL is empty or already seen
-            if not url or url in seen_urls:
+            if not url or url in seen_urls or url.startswith("blob:"):
                 continue
-
-            # Get bounding box dimensions - this is the main operation
             box = driver.execute_script("""
                 const rect = arguments[0].getBoundingClientRect();
                 return {width: rect.width, height: rect.height, top: rect.top, left: rect.left};
             """, img)
-
-            # Apply filtering criteria
             if box["width"] < 320 or box["height"] < 300:
                 continue
             if box["top"] < 0 or box["left"] < 0:
                 continue
-
-            # If all checks pass, collect the image
             seen_urls.add(url)
-            label = f"video_still_{index:02d}" if video_detected else f"image_{index:02d}"
+            label = f"image_{index:02d}"
             media_items.append((url, label))
-            
-            collected_count_on_slide += 1
-            # [+] Message: Show how many media items have been collected so far.
-            # We can indicate it's out of the total img tags scanned for context.
-            tqdm.write(f"  [+] Collected media {collected_count_on_slide}/{len(img_tags)} (total scanned): {label}")
-            
-            index += 1 # Increment global index for the next item
-
-    def collect_media():
-        nonlocal index, video_detected
-        tqdm.write(f"[i] Searching for <img> and <video> tags...")
-        elements = driver.find_elements(By.TAG_NAME, "img") + driver.find_elements(By.TAG_NAME, "video")
-        collected_count_on_slide = 0
-
-        for elem in elements:
-            url = elem.get_attribute("src")
-            if not url or url in seen_urls:
-                continue
-
-            box = driver.execute_script("""
-                const rect = arguments[0].getBoundingClientRect();
-                return {width: rect.width, height: rect.height, top: rect.top, left: rect.left};
-            """, elem)
-
-            if box["width"] < 320 or box["height"] < 300:
-                continue
-            if box["top"] < 0 or box["left"] < 0:
-                continue
-
-            seen_urls.add(url)
-            if elem.tag_name == "video":
-                label = f"video_{index:02d}"
-                video_detected = True
-            else:
-                label = f"image_{index:02d}"
-            media_items.append((url, label))
-            collected_count_on_slide += 1
-            tqdm.write(f"  [+] Collected media {collected_count_on_slide}/{len(elements)}: {label}")
             index += 1
 
+        # Detect if any <video> is present in the post (for yt-dlp)
+        videos = driver.find_elements(By.TAG_NAME, "video")
+        if videos:
+            video_detected = True
+
+    # Carousel navigation loop (as before)
     next_button_xpath = '//button[contains(@class, "_afxw") or @aria-label="Next"]'
     slide_count = 1
-
     while True:
         tqdm.write(f"[→] Processing slide {slide_count}")
-        collect_media()
+        collect_images()
         try:
             next_button = WebDriverWait(driver, 2).until(
                 EC.element_to_be_clickable((By.XPATH, next_button_xpath))
@@ -473,23 +428,20 @@ def extract_media_urls(post_url):
         for url, label in media_items:
             f.write(f"{label}: {url}\n")
 
-    # Remove download_video call from here
     call_ytdlp = video_detected or not media_items
-
-    if not media_items and not video_detected:
-        tqdm.write(f"[!] WARNING: No media found for {post_url}")
-        with open(ERROR_LOG, "a") as elog:
-            elog.write(f"{post_url} — no media found\n")
-    else:
-        tqdm.write(f"[✓] {len(media_items)} image(s) saved → {post_dir}/media_urls.txt")
-        with open(RESUME_FILE, "w") as rfile:
-            rfile.write(post_url)
-
     return media_items, post_dir, call_ytdlp
 
 # === Main Execution ===
 def main():
     try:
+        if args.retry_errors_only:
+            # Only retry failed posts from error logs, then exit
+            error_log_pattern = os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "*-errors_*.log")
+            error_logs = glob.glob(error_log_pattern)
+            error_logs = list(set(error_logs + [ERROR_LOG]))
+            retry_failed_posts(error_logs)
+            return  # Exit after retrying errors
+
         if POST_URL:
             # If a specific post ID is provided, just scrape that one
             items, dir_path, call_ytdlp = extract_media_urls(POST_URL)
@@ -564,11 +516,124 @@ def main():
                     tqdm.write(f"[!!!] Error processing {link_to_process}: {e}")
                     with open(ERROR_LOG, "a") as elog:
                         elog.write(f"{link_to_process} — main loop error: {e}\n")
+        if not args.no_retry_errors:
+            # Find all error logs for this session/user
+            error_log_pattern = os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "*-errors_*.log")
+            error_logs = glob.glob(error_log_pattern)
+            # Always include the current ERROR_LOG in case it's not matched (avoid duplicates with set)
+            error_logs = list(set(error_logs + [ERROR_LOG]))
+            retry_failed_posts(error_logs)
     except KeyboardInterrupt:
         print("[!] Interrupted by user - please wait for clean exit...")
     finally:
         driver.quit()
         print("[✓] Browser closed.")
+
+def extract_urls_from_error_log(error_log_path):
+    """Extracts Instagram post URLs from an error log file."""
+    urls = set()
+    if not os.path.exists(error_log_path):
+        return urls
+    with open(error_log_path, "r") as f:
+        for line in f:
+            # Look for a URL at the start of the line
+            match = re.match(r"(https://www\.instagram\.com/(?:p|reel)/[A-Za-z0-9_\-]+)/?", line)
+            if match:
+                urls.add(match.group(1))
+    return urls
+
+def retry_failed_posts(error_log_paths):
+    """Retry posts that failed in previous runs, based only on error logs.
+    If a post is successfully processed (all media skipped or downloaded), it is not included in the new error log.
+    """
+    all_failed_urls = set()
+    for log_path in error_log_paths:
+        all_failed_urls.update(extract_urls_from_error_log(log_path))
+    if not all_failed_urls:
+        tqdm.write("[✓] No failed posts to retry.")
+        return
+
+    tqdm.write(f"[!] Retrying {len(all_failed_urls)} failed posts from error logs...")
+    still_failed_urls = set()
+    for url in tqdm(all_failed_urls, desc="Retrying Failed Posts"):
+        try:
+            items, dir_path, call_ytdlp = extract_media_urls(url)
+            # Track if any image/video actually needed to be downloaded
+            all_exist = True
+            for media_url, label in items:
+                parsed_url = urllib.parse.urlparse(media_url)
+                original_filename = os.path.basename(parsed_url.path)
+                if not original_filename:
+                    ext = os.path.splitext(parsed_url.path)[-1]
+                    original_filename = f"media{ext if ext else '.jpg'}"
+                filename = f"{label}_{original_filename}"
+                filepath = os.path.join(dir_path, sanitize_filename(filename))
+                if not os.path.exists(filepath):
+                    all_exist = False
+                    break
+            # For video, check if any video file exists
+            video_exists = False
+            if call_ytdlp:
+                video_files = [f for f in os.listdir(dir_path) if f.endswith(('.mp4', '.webm', '.mkv'))]
+                if video_files:
+                    video_exists = True
+            # If all images and (if needed) video exist, consider this post as successfully processed
+            if (items and all_exist) and (not call_ytdlp or video_exists):
+                tqdm.write(f"[✓] All media already present for {url}, removing from error log.")
+                continue
+            # Otherwise, try to download missing media
+            try:
+                download_images(items, dir_path)
+                if call_ytdlp:
+                    shortcode = url.rstrip('/').split('/')[-1]
+                    download_video(url, dir_path, shortcode)
+            except Exception as e:
+                tqdm.write(f"[!!!] Error retrying {url}: {e}")
+                still_failed_urls.add(url)
+                continue
+            # After download attempt, check again if all media exist
+            all_exist = True
+            for media_url, label in items:
+                parsed_url = urllib.parse.urlparse(media_url)
+                original_filename = os.path.basename(parsed_url.path)
+                if not original_filename:
+                    ext = os.path.splitext(parsed_url.path)[-1]
+                    original_filename = f"media{ext if ext else '.jpg'}"
+                filename = f"{label}_{original_filename}"
+                filepath = os.path.join(dir_path, sanitize_filename(filename))
+                if not os.path.exists(filepath):
+                    all_exist = False
+                    break
+            video_exists = False
+            if call_ytdlp:
+                video_files = [f for f in os.listdir(dir_path) if f.endswith(('.mp4', '.webm', '.mkv'))]
+                if video_files:
+                    video_exists = True
+            if (items and all_exist) and (not call_ytdlp or video_exists):
+                tqdm.write(f"[✓] Successfully retried {url}")
+            else:
+                still_failed_urls.add(url)
+        except Exception as e:
+            tqdm.write(f"[!!!] Error retrying {url}: {e}")
+            still_failed_urls.add(url)
+
+    # Remove all old error logs
+    for log_path in error_log_paths:
+        try:
+            os.remove(log_path)
+        except Exception:
+            pass
+
+    # Write new error log with only remaining failed URLs
+    if still_failed_urls:
+        new_error_log = os.path.join(DOWNLOAD_ROOT, SESSION_NAME, f"{SESSION_NAME}-errors_remaining_{timestamp_now}.log")
+        
+        with open(new_error_log, "w") as elog:
+            for url in still_failed_urls:
+                elog.write(f"{url} — still failed after retry\n")
+        tqdm.write(f"[!] Wrote new error log: {new_error_log}")
+    else:
+        tqdm.write("[✓] All previously errored posts processed successfully!")
 
 if __name__ == "__main__":
     main()
