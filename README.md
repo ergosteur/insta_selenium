@@ -1,13 +1,14 @@
 # insta_selenium
 
-A Python automation tool for interacting with Instagram using Selenium WebDriver.
+A Python tool for scraping and downloading Instagram post and reel media using Selenium WebDriver.
 
 ## Features
 
-- Automate login to Instagram
-- Like and comment on posts
-- Follow and unfollow users
-- Scrape user data and posts
+- Scrape post and reel URLs from public Instagram profiles
+- Download images and videos from posts and reels
+- Save post metadata (caption, timestamp, etc.)
+- Resume interrupted downloads and avoid duplicates
+- Supports headless mode for automated/scripted use
 
 ## Requirements
 
