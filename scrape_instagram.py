@@ -31,19 +31,38 @@ parser.add_argument("--no-resume", dest="no_resume", action="store_true", help="
 # Added an argument for the file that stores ALL processed URLs for robust deduplication
 parser.add_argument("--processed-urls-file", help="File to track all unique URLs already processed")
 parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
+parser.add_argument("--login", action="store_true", help="Open browser for Instagram login and save session to Firefox profile")
+parser.add_argument("--download-path", help="Directory to save downloaded media (default: ./downloads)")
+parser.add_argument("--firefox-profile-dir", help="Path to Firefox profile directory (default: ./firefox_profile)")
 args = parser.parse_args()
+
+# === Mutually exclusive check for --login and --headless ===
+if args.login and args.headless:
+    print("[!] Error: --login and --headless cannot be used together.")
+    print("    --login requires a visible browser window for manual login.")
+    sys.exit(1)
 
 # === Constants ===
 BASE_URL = "https://www.instagram.com"
 PROFILE_URL = f"{BASE_URL}/{args.username}/"
 POST_URL = f"{BASE_URL}/p/{args.post_id}/" if args.post_id else None
 SESSION_NAME = args.post_id if args.post_id else args.username
-DOWNLOAD_ROOT = os.path.abspath("downloads")
-PROFILE_DIR = os.path.abspath("./firefox_profile")
+
+DOWNLOAD_ROOT = os.path.abspath(args.download_path) if args.download_path else os.path.abspath("downloads")
+PROFILE_DIR = os.path.abspath(args.firefox_profile_dir) if args.firefox_profile_dir else os.path.abspath("./firefox_profile")
 MAX_GRABBED_POSTS = args.max_grabbed_posts if args.max_grabbed_posts else None
 os.makedirs(DOWNLOAD_ROOT, exist_ok=True)
-os.makedirs(PROFILE_DIR, exist_ok=True)
 timestamp_now = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+# Warn if PROFILE_DIR does not exist and not in login mode
+if not os.path.exists(PROFILE_DIR):
+    if args.login:
+        os.makedirs(PROFILE_DIR, exist_ok=True)
+    else:
+        print(f"[!] Firefox profile directory '{PROFILE_DIR}' does not exist.")
+        print("    You must login first to create a profile with Instagram cookies.")
+        print("    Run this script with the --login flag to do so.")
+        sys.exit(1)
 
 # Paths for persistence files
 RESUME_FILE = args.resume_file or os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "last-post-url.txt")
@@ -51,12 +70,9 @@ RESUME_LOG = args.resume_log or os.path.join(DOWNLOAD_ROOT, SESSION_NAME, f"{SES
 ERROR_LOG = RESUME_LOG.replace("posts_", "errors_")
 # New file to store the set of all unique processed URLs
 PROCESSED_URLS_FILE = os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "processed-urls.json")
-# If --processed-urls-file is explicitly provided, use it
 if args.processed_urls_file:
     PROCESSED_URLS_FILE = os.path.abspath(args.processed_urls_file)
 
-
-# Ensure session directory exists for persistence files
 session_dir = os.path.join(DOWNLOAD_ROOT, SESSION_NAME)
 os.makedirs(session_dir, exist_ok=True)
 
@@ -72,6 +88,16 @@ service = Service()
 driver = webdriver.Firefox(service=service, options=options)
 driver.implicitly_wait(10)
 
+# Handle --login mode
+if args.login:
+    print("[*] Opening Instagram login page in Firefox...")
+    driver.get("https://www.instagram.com/accounts/login/")
+    print("[*] Please log in to Instagram in the opened browser window.")
+    print("[*] Do NOT close the browser after logging in.")
+    input("[*] After you have logged in and see your feed, press Enter here to finish and save the session...")
+    print("[*] Login session should now be saved in your Firefox profile directory.")
+    driver.quit()
+    sys.exit(0)
 
 def sanitize_filename(url):
     name = urllib.parse.unquote(url.split("?")[0].split("/")[-1])
