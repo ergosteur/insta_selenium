@@ -59,6 +59,8 @@ BASE_URL = "https://www.instagram.com"
 PROFILE_URL = f"{BASE_URL}/{args.username}/"
 POST_URL = f"{BASE_URL}/p/{args.post_id}/" if args.post_id else None
 SESSION_NAME = args.post_id if args.post_id else args.username
+if SESSION_NAME is None:
+    SESSION_NAME = "login_session"
 
 DOWNLOAD_ROOT = os.path.abspath(args.download_path) if args.download_path else os.path.abspath("downloads")
 PROFILE_DIR = os.path.abspath(args.firefox_profile_dir) if args.firefox_profile_dir else os.path.abspath("./firefox_profile")
