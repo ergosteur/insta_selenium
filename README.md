@@ -73,6 +73,10 @@ insta_selenium --help
 - Use responsibly and in accordance with Instagram's terms of service.
 - Excessive automation may result in account restrictions or bans.
 
+## AI-Assisted Development
+
+This project was developed with the assistance of AI tools.
+
 ## License
 
 GPL-3.0 License
