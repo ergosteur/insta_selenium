@@ -30,10 +30,7 @@ jobs:
 
     - name: Build the Docker image
       run: |
-        docker build . --file Dockerfile --tag ghcr.io/${{ github.repository }}:latest --tag ${{ secrets.DOCKERHUB_USERNAME }}/insta_selenium:latest
-
-    - name: Push to GHCR
-      run: docker push ghcr.io/${{ github.repository }}:latest
+        docker build . --file Dockerfile --tag ${{ secrets.DOCKERHUB_USERNAME }}/insta_selenium:latest
 
     - name: Push to Docker Hub
       run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/insta_selenium:latest
