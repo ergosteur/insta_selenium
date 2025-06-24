@@ -2,7 +2,11 @@ FROM python:3.12-slim
 
 # Install Firefox and dependencies for both headless and VNC/noVNC operation
 RUN apt-get update && \
-    apt-get install -y firefox-esr wget gnupg xvfb fluxbox x11vnc curl && \
+    apt-get install -y --no-install-recommends firefox-esr wget gnupg curl && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends xvfb fluxbox x11vnc && \
     rm -rf /var/lib/apt/lists/*
 
 # Install geckodriver
