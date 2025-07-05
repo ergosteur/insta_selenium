@@ -44,6 +44,7 @@ parser.add_argument("--firefox-profile-dir", help="Path to Firefox profile direc
 parser.add_argument("--overwrite", action="store_true", help="Overwrite existing downloaded files")
 parser.add_argument("--no-retry-errors", action="store_true", help="Do not retry failed posts from error logs")
 parser.add_argument("--retry-errors-only", action="store_true", help="Only retry failed posts from error logs and exit")
+parser.add_argument("--cleanup-and-retry", action="store_true", help="Delete post directories with no images or videos, remove their URLs from processed log, and retry them.")
 args = parser.parse_args()
 
 # === Constants ===
@@ -432,6 +433,10 @@ def extract_media_urls(post_url):
 # === Main Execution ===
 def main():
     try:
+        if getattr(args, "cleanup_and_retry", False):
+            cleanup_and_retry_empty_dirs()
+            return
+
         if args.retry_errors_only:
             # Only retry failed posts from error logs, then exit
             error_log_pattern = os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "*-errors_*.log")
@@ -632,6 +637,79 @@ def retry_failed_posts(error_log_paths):
         tqdm.write(f"[!] Wrote new error log: {new_error_log}")
     else:
         tqdm.write("[✓] All previously errored posts processed successfully!")
+
+def cleanup_and_retry_empty_dirs():
+    """
+    Delete post directories with no images or videos, remove their URLs from processed log, and retry them.
+    """
+    session_dir = os.path.join(DOWNLOAD_ROOT, SESSION_NAME)
+    if not os.path.exists(session_dir):
+        tqdm.write(f"[!] Session directory not found: {session_dir}")
+        return
+    
+    # Load processed URLs
+    processed_urls = load_processed_urls(PROCESSED_URLS_FILE)
+    # Map shortcode to URL for quick lookup
+    shortcode_to_url = {url.rstrip('/').split('/')[-1]: url for url in processed_urls}
+    
+    empty_shortcodes = []
+    for entry in os.listdir(session_dir):
+        entry_path = os.path.join(session_dir, entry)
+        if not os.path.isdir(entry_path):
+            continue
+        # Only consider directories with a valid shortcode (date_shortcode)
+        if '_' not in entry:
+            continue
+        _, shortcode = entry.split('_', 1)
+        # Check for media files
+        has_media = False
+        for ext in ('.jpg', '.jpeg', '.png', '.mp4', '.webm', '.mkv'):
+            if any(f.endswith(ext) for f in os.listdir(entry_path)):
+                has_media = True
+                break
+        if not has_media:
+            tqdm.write(f"[!] Deleting empty post dir: {entry_path}")
+            # Remove directory and contents
+            try:
+                for root, dirs, files in os.walk(entry_path, topdown=False):
+                    for name in files:
+                        os.remove(os.path.join(root, name))
+                    for name in dirs:
+                        os.rmdir(os.path.join(root, name))
+                os.rmdir(entry_path)
+            except Exception as e:
+                tqdm.write(f"[!] Error deleting {entry_path}: {e}")
+            empty_shortcodes.append(shortcode)
+    
+    # Remove URLs from processed_urls
+    removed_urls = set()
+    for shortcode in empty_shortcodes:
+        url = shortcode_to_url.get(shortcode)
+        if url and url in processed_urls:
+            processed_urls.remove(url)
+            removed_urls.add(url)
+    if removed_urls:
+        tqdm.write(f"[!] Removed {len(removed_urls)} URLs from processed log.")
+        save_processed_urls(PROCESSED_URLS_FILE, processed_urls)
+    else:
+        tqdm.write("[✓] No processed URLs needed removal.")
+    
+    # Retry the removed URLs
+    if removed_urls:
+        tqdm.write(f"[!] Retrying {len(removed_urls)} cleaned-up posts...")
+        for url in tqdm(removed_urls, desc="Retrying Cleaned Posts"):
+            try:
+                items, dir_path, call_ytdlp = extract_media_urls(url)
+                download_images(items, dir_path)
+                if call_ytdlp:
+                    shortcode = url.rstrip('/').split('/')[-1]
+                    download_video(url, dir_path, shortcode)
+                processed_urls.add(url)
+                save_processed_urls(PROCESSED_URLS_FILE, processed_urls)
+            except Exception as e:
+                tqdm.write(f"[!!!] Error retrying {url}: {e}")
+    else:
+        tqdm.write("[✓] No posts to retry after cleanup.")
 
 if __name__ == "__main__":
     main()
