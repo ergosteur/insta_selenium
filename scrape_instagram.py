@@ -1,6 +1,6 @@
 # =============================================================================
 # scrape_instagram.py
-# Version: 0.1.1
+# Version: 0.1.2
 # Description: Scrape and download Instagram post and reel media using Selenium.
 # Author: ergosteur
 # License: GPL-3.0
