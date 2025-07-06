@@ -45,6 +45,8 @@ parser.add_argument("--overwrite", action="store_true", help="Overwrite existing
 parser.add_argument("--no-retry-errors", action="store_true", help="Do not retry failed posts from error logs")
 parser.add_argument("--retry-errors-only", action="store_true", help="Only retry failed posts from error logs and exit")
 parser.add_argument("--cleanup-and-retry", action="store_true", help="Delete post directories with no images or videos, remove their URLs from processed log, and retry them.")
+parser.add_argument("--download-stories", action="store_true", help="Download all available stories for the target user (requires login)")
+parser.add_argument("--skip-posts", action="store_true", help="Only download stories, skip posts and reels (equivalent to --max-scraped-posts 0)")
 args = parser.parse_args()
 
 # === Constants ===
@@ -436,7 +438,13 @@ def main():
         if getattr(args, "cleanup_and_retry", False):
             cleanup_and_retry_empty_dirs()
             return
-
+        # Download stories if requested
+        if getattr(args, "download_stories", False):
+            download_stories(args.username)
+            if getattr(args, "skip_posts", False) or (hasattr(args, "max_scraped_posts") and args.max_scraped_posts == 0):
+                return
+        if getattr(args, "skip_posts", False):
+            return
         if args.retry_errors_only:
             # Only retry failed posts from error logs, then exit
             error_log_pattern = os.path.join(DOWNLOAD_ROOT, SESSION_NAME, "*-errors_*.log")
@@ -710,6 +718,221 @@ def cleanup_and_retry_empty_dirs():
                 tqdm.write(f"[!!!] Error retrying {url}: {e}")
     else:
         tqdm.write("[✓] No posts to retry after cleanup.")
+
+def pause_story_if_playing():
+    """Pause the story if it is currently playing (auto-advancing)."""
+    try:
+        # Look for a button (div[role=button]) containing an SVG with <title>Pause</title>
+        btns = driver.find_elements(By.XPATH, '//div[@role="button"]//svg[title="Pause"]/ancestor::div[@role="button"]')
+        for btn in btns:
+            if btn.is_displayed() and btn.is_enabled():
+                driver.execute_script("arguments[0].click();", btn)  # Use JS click for reliability
+                tqdm.write("[i] Paused story auto-advance.")
+                time.sleep(0.5)
+                return
+        # If already paused, do nothing
+    except Exception as e:
+        tqdm.write(f"[!] Could not pause story: {e}")
+        pass
+
+def download_stories(username):
+    """
+    Download all available stories for the given username. Save images/videos and metadata.
+    """
+    tqdm.write(f"[+] Checking for stories for user: {username}")
+    driver.get(f"{BASE_URL}/{username}/")
+    time.sleep(3)
+    try:
+        story_pic = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, '//header//canvas/../..//img | //header//a[contains(@href, "/stories/")]/img | //header//img[contains(@src, "scontent")]'))
+        )
+        story_pic.click()
+        tqdm.write("[i] Opened story viewer.")
+        time.sleep(2)
+    except Exception as e:
+        tqdm.write(f"[!] No story found or could not open story viewer for {username}: {e}")
+        return
+
+    slide_idx = 1
+    downloaded_count = 0
+    seen_media = set()
+    while True:
+        try:
+            # Wait for SVG with aria-label Play or Pause (not the button)
+            try:
+                WebDriverWait(driver, 10).until(
+                    lambda d: d.find_elements(By.XPATH, '//svg[@aria-label="Pause"]') or
+                              d.find_elements(By.XPATH, '//svg[@aria-label="Play"]')
+                )
+            except Exception as e:
+                tqdm.write(f"[!] Neither Play nor Pause SVG found in slide {slide_idx}: {e}")
+                # Try to advance to next story if possible
+                next_btn = None
+                for xpath in [
+                    '//button[contains(@aria-label, "Next")]',
+                    '//button[@tabindex="0" and (contains(@aria-label, "Next") or contains(@aria-label, "next"))]',
+                    '//button[contains(@class, "coreSpriteRightChevron")]'
+                ]:
+                    try:
+                        btn = driver.find_element(By.XPATH, xpath)
+                        if btn.is_displayed() and btn.is_enabled():
+                            next_btn = btn
+                            break
+                    except Exception:
+                        continue
+                if next_btn:
+                    next_btn.click()
+                    time.sleep(1.5)
+                    slide_idx += 1
+                    continue
+                else:
+                    tqdm.write("[✓] Reached end of stories (no next button found after missing Play/Pause SVG).")
+                    break
+
+            # Pause if playing
+            try:
+                pause_svgs = driver.find_elements(By.XPATH, '//svg[@aria-label="Pause"]')
+                if pause_svgs:
+                    svg = pause_svgs[0]
+                    # Click the parent button or div
+                    parent = svg.find_element(By.XPATH, './ancestor::*[self::button or self::div][@role="button"]')
+                    driver.execute_script("arguments[0].click();", parent)
+                    tqdm.write("[i] Paused story auto-advance.")
+                    time.sleep(0.5)
+            except Exception as e:
+                tqdm.write(f"[!] Could not pause story: {e}")
+
+            time.sleep(0.2)
+            # Now search for the large video or image element
+            media_url = None
+            media_type = None
+            # Prefer video if present
+            video_elems = driver.find_elements(By.XPATH, '//div[contains(@role, "presentation")]//video')
+            for vid in video_elems:
+                try:
+                    box = driver.execute_script("""
+                        const rect = arguments[0].getBoundingClientRect();
+                        return {width: rect.width, height: rect.height, top: rect.top, left: rect.left};
+                    """, vid)
+                    if box["width"] > 300 and box["height"] > 300 and box["top"] >= 0 and box["left"] >= 0:
+                        media_url = vid.get_attribute("src")
+                        media_type = "video"
+                        break
+                except Exception:
+                    continue
+            if not media_url:
+                img_elems = driver.find_elements(By.XPATH, '//div[contains(@role, "presentation")]//img')
+                for img in img_elems:
+                    try:
+                        box = driver.execute_script("""
+                            const rect = arguments[0].getBoundingClientRect();
+                            return {width: rect.width, height: rect.height, top: rect.top, left: rect.left};
+                        """, img)
+                        if box["width"] > 300 and box["height"] > 300 and box["top"] >= 0 and box["left"] >= 0:
+                            media_url = img.get_attribute("src")
+                            media_type = "image"
+                            break
+                    except Exception:
+                        continue
+            if not media_url:
+                tqdm.write(f"[!] No valid story media found in slide {slide_idx}")
+                # Try to advance to next story if possible
+                next_btn = None
+                for xpath in [
+                    '//button[contains(@aria-label, "Next")]',
+                    '//button[@tabindex="0" and (contains(@aria-label, "Next") or contains(@aria-label, "next"))]',
+                    '//button[contains(@class, "coreSpriteRightChevron")]'
+                ]:
+                    try:
+                        btn = driver.find_element(By.XPATH, xpath)
+                        if btn.is_displayed() and btn.is_enabled():
+                            next_btn = btn
+                            break
+                    except Exception:
+                        continue
+                if next_btn:
+                    next_btn.click()
+                    time.sleep(1.5)
+                    slide_idx += 1
+                    continue
+                else:
+                    tqdm.write("[✓] Reached end of stories (no next button found after missing media).")
+                    break
+            if media_url in seen_media:
+                tqdm.write(f"[i] Duplicate media in slide {slide_idx}, skipping.")
+            else:
+                seen_media.add(media_url)
+                # Try to get timestamp (aria-label or time element)
+                timestamp = None
+                try:
+                    time_elem = driver.find_elements(By.XPATH, '//time')
+                    if time_elem:
+                        timestamp = time_elem[0].get_attribute('datetime')
+                    else:
+                        container = driver.find_element(By.XPATH, '//section[contains(@aria-label, "Story")]')
+                        timestamp = container.get_attribute('aria-label')
+                except Exception as e:
+                    tqdm.write(f"[!] Error extracting timestamp: {e}")
+                    timestamp = None
+                if not timestamp:
+                    timestamp = datetime.now().isoformat()
+                timestamp_prefix = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).strftime("%Y%m%d_%H%M%S") if timestamp else datetime.now().strftime("%Y%m%d_%H%M%S")
+                # Save media
+                story_dir = os.path.join(DOWNLOAD_ROOT, SESSION_NAME, f"stories_{username}")
+                os.makedirs(story_dir, exist_ok=True)
+                ext = ".mp4" if media_type == "video" else ".jpg"
+                filename = f"story_{timestamp_prefix}_{slide_idx:02d}{ext}"
+                filepath = os.path.join(story_dir, filename)
+                tqdm.write(f"[↓] Downloading story {slide_idx} ({media_type}): {media_url}")
+                try:
+                    with requests.get(media_url, stream=True, timeout=20) as r:
+                        r.raise_for_status()
+                        with open(filepath, 'wb') as f:
+                            for chunk in r.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                except Exception as e:
+                    tqdm.write(f"[!] Failed to download story media: {e}")
+                # Save metadata
+                metadata = {
+                    "username": username,
+                    "media_type": media_type,
+                    "media_url": media_url,
+                    "timestamp": timestamp,
+                    "filename": filename,
+                    "slide_index": slide_idx
+                }
+                with open(os.path.join(story_dir, f"story_{timestamp_prefix}_{slide_idx:02d}.json"), "w") as meta_file:
+                    json.dump(metadata, meta_file, indent=2)
+                downloaded_count += 1
+            # Try to go to next story slide (right arrow or auto-advance)
+            try:
+                next_btn = None
+                for xpath in [
+                    '//button[contains(@aria-label, "Next")]',
+                    '//button[@tabindex="0" and (contains(@aria-label, "Next") or contains(@aria-label, "next"))]',
+                    '//button[contains(@class, "coreSpriteRightChevron")]'
+                ]:
+                    try:
+                        btn = driver.find_element(By.XPATH, xpath)
+                        if btn.is_displayed() and btn.is_enabled():
+                            next_btn = btn
+                            break
+                    except Exception:
+                        continue
+                if next_btn:
+                    next_btn.click()
+                    time.sleep(1.5)
+                    slide_idx += 1
+                else:
+                    tqdm.write("[✓] Reached end of stories (no next button found).")
+                    break
+            except Exception as e:
+                tqdm.write(f"[✓] Reached end of stories (exception on next): {e}")
+                break
+        except Exception as e:
+            tqdm.write(f"[!] Error in story slide {slide_idx}: {e}")
+            break
+    tqdm.write(f"[✓] Finished downloading {downloaded_count} stories for {username}.")
 
 if __name__ == "__main__":
     main()
