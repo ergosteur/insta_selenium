@@ -247,7 +247,9 @@ def collect_post_links():
 
 # === Media download functions ===
 def download_video(post_url, post_dir, shortcode, label="video"):
-    """Download video(s) from an Instagram post using yt-dlp, preserving original filename if possible."""
+    """Download video(s) from an Instagram post using yt-dlp, preserving original filename if possible.
+    Shows successful downloads and only logs errors for video slides.
+    """
     from yt_dlp import YoutubeDL
     # Use yt-dlp's %(title)s or %(id)s as fallback, and prefix with label
     outtmpl = os.path.join(post_dir, f"{label}_%(id)s.%(ext)s")
@@ -259,6 +261,18 @@ def download_video(post_url, post_dir, shortcode, label="video"):
     try:
         user_agent = driver.execute_script("return navigator.userAgent;")
         tqdm.write(f"[▶] Downloading video(s) via yt-dlp from post: {shortcode}")
+        # Store download results
+        download_results = []
+
+        def hook(d):
+            # Called for each file processed by yt-dlp
+            if d['status'] == 'finished':
+                tqdm.write(f"[✓] Downloaded: {d['filename']}")
+                download_results.append({'filename': d['filename'], 'status': 'finished'})
+            elif d['status'] == 'error':
+                tqdm.write(f"[!] yt-dlp error: {d.get('filename', '')}")
+                download_results.append({'filename': d.get('filename', ''), 'status': 'error'})
+
         ytdl_opts = {
             'outtmpl': outtmpl,
             'quiet': True,
@@ -275,9 +289,27 @@ def download_video(post_url, post_dir, shortcode, label="video"):
                 'key': 'FFmpegVideoConvertor',
                 'preferedformat': 'mp4',  # Convert to mp4 if not already
             }],
+            'progress_hooks': [hook],
+            # 'logger': ... # Optionally, could add a custom logger
         }
         with YoutubeDL(ytdl_opts) as ytdl:
-            ytdl.download([post_url])
+            # The download() method returns a count of successful downloads (int)
+            result = ytdl.download([post_url])
+            # After download, check for errors in the results
+            # yt-dlp may try to download all slides (videos and images), but only video slides will succeed.
+            # We'll only log errors for video slides.
+            # To do this, list all expected video files and check which ones were not downloaded.
+            # However, yt-dlp's ignoreerrors=True means it won't raise, so we rely on hooks.
+            # If there are any errors in download_results, check if the filename is a video file.
+            for entry in download_results:
+                if entry['status'] == 'error':
+                    # Only log error if the filename is a video file (mp4/webm/mkv)
+                    if entry['filename'].endswith(('.mp4', '.webm', '.mkv')):
+                        tqdm.write(f"[!] yt-dlp failed to download video: {entry['filename']}")
+                        with open(ERROR_LOG, "a") as elog:
+                            elog.write(f"{post_url} — yt-dlp error: failed to download {entry['filename']}\n")
+            if not download_results:
+                tqdm.write(f"[!] yt-dlp did not download any files for {post_url}")
     except Exception as e:
         tqdm.write(f"[!] yt-dlp error: {e}")
         with open(ERROR_LOG, "a") as elog:

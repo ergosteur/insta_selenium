@@ -196,3 +196,6 @@ cython_debug/
 
 # Selenium firefox profile
 firefox_profile
+
+# data dir from Docker
+data/
