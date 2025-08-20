@@ -99,6 +99,7 @@ python scrape_instagram.py --username <instagram_username> [options]
 - `--login`: Open browser for Instagram login and save session to Firefox profile.
 - `--no-retry-errors`: Do not retry failed posts from error logs.
 - `--retry-errors-only`: Only retry failed posts from error logs and exit.
+- `--cleanup-and-retry`: Delete post directories with no images or videos, remove their URLs from processed log, and retry them.
 
 For a full list of options, run:
 
